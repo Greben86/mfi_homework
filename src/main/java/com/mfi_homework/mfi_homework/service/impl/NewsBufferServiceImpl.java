@@ -17,21 +17,35 @@ public class NewsBufferServiceImpl implements NewsBufferService {
 
     private final Map<String, List<NewsItem>> bufferMap = new HashMap<>();
 
-    @Value("${news.buffer.max_size}")
-    private int maxSize;
+    @Value("${news.buffer.max_count_for_site}")
+    private int maxCountForSite;
 
     private final ArticleService articleService;
 
     @Override
-    public synchronized void putAndSave(Map<String, List<NewsItem>> map) {
+    public synchronized void putAllAndCheck(Map<String, List<NewsItem>> map) {
         putAll(map);
-        if (bufferMap.size() >= maxSize) {
-            saveAndClear();
+        saveFullSitesAndRemove();
+    }
+
+    private void saveFullSitesAndRemove() {
+        var fullSites = bufferMap.entrySet().stream()
+                .filter(entry -> entry.getValue().size() >= maxCountForSite)
+                .map(Map.Entry::getKey)
+                .toList();
+        if (fullSites.size() > 0) {
+            var newsList = bufferMap.entrySet().stream()
+                    .filter(entry -> fullSites.contains(entry.getKey()))
+                    .map(Map.Entry::getValue)
+                    .flatMap(List::stream)
+                    .toList();
+            articleService.saveArticles(newsList);
+            fullSites.forEach(bufferMap::remove);
         }
     }
 
     @Override
-    public synchronized void saveAndClear() {
+    public synchronized void saveAllAndClear() {
         if (bufferMap.isEmpty()) {
             return;
         }

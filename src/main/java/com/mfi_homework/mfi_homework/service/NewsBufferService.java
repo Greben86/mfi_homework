@@ -8,7 +8,7 @@ import java.util.Map;
 
 public interface NewsBufferService {
 
-    void putAndSave(Map<String, List<NewsItem>> map);
+    void putAllAndCheck(Map<String, List<NewsItem>> map);
 
-    void saveAndClear();
+    void saveAllAndClear();
 }

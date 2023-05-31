@@ -4,6 +4,7 @@ import com.mfi_homework.mfi_homework.entity.NewsItem;
 import com.mfi_homework.mfi_homework.entity.NewsResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.context.support.SpringBeanAutowiringSupport;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.util.UriTemplate;
 
@@ -30,6 +31,8 @@ public class ReadNewsTask implements Runnable {
 
     @Override
     public void run() {
+        SpringBeanAutowiringSupport.processInjectionBasedOnCurrentContext(this);
+
         var uriTemplate = new UriTemplate(url + URI_PARAMS_TEMPLATE);
         while (skipCount.get() < max_count) {
             try {
@@ -38,13 +41,14 @@ public class ReadNewsTask implements Runnable {
 
                 TimeUnit.SECONDS.sleep(duration_sleep);
             } catch (InterruptedException e) {
-                log.error(e.getMessage(), e);
+                log.warn("Await interrupted", e);
+                Thread.currentThread().interrupt();
                 break;
             } catch (Exception e) {
                 log.error(e.getMessage(), e);
             }
         }
-        buffer.saveAndClear();
+        buffer.saveAllAndClear();
         log.info("All news already read");
     }
 
@@ -63,7 +67,7 @@ public class ReadNewsTask implements Runnable {
                     .peek(item -> log.info(item.toString()))
                     .collect(Collectors.groupingBy(NewsItem::getNewsSite, Collectors.toList()));
 
-            buffer.putAndSave(newsMap);
+            buffer.putAllAndCheck(newsMap);
         }
     }
 
