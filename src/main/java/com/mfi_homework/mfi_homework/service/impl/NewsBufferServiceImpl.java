@@ -7,15 +7,14 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 @RequiredArgsConstructor
 @Component
 public class NewsBufferServiceImpl implements NewsBufferService {
 
-    private final Map<String, List<NewsItem>> bufferMap = new HashMap<>();
+    private final Map<String, List<NewsItem>> bufferMap = new ConcurrentHashMap<>();
 
     @Value("${news.buffer.max_count_for_site}")
     private int maxCountForSite;
@@ -23,12 +22,13 @@ public class NewsBufferServiceImpl implements NewsBufferService {
     private final ArticleService articleService;
 
     @Override
-    public synchronized void putAllAndCheck(Map<String, List<NewsItem>> map) {
+    public void putAllAndCheck(Map<String, List<NewsItem>> map) {
         putAll(map);
-        saveFullSitesAndRemove();
+        var newsList = getFullSitesAndRemove();
+        articleService.saveArticles(newsList);
     }
 
-    private void saveFullSitesAndRemove() {
+    private synchronized List<NewsItem> getFullSitesAndRemove() {
         var fullSites = bufferMap.entrySet().stream()
                 .filter(entry -> entry.getValue().size() >= maxCountForSite)
                 .map(Map.Entry::getKey)
@@ -39,31 +39,39 @@ public class NewsBufferServiceImpl implements NewsBufferService {
                     .map(Map.Entry::getValue)
                     .flatMap(List::stream)
                     .toList();
-            articleService.saveArticles(newsList);
             fullSites.forEach(bufferMap::remove);
+            return newsList;
+        } else {
+            return Collections.emptyList();
         }
     }
 
     @Override
-    public synchronized void saveAllAndClear() {
+    public void saveAllAndClear() {
         if (bufferMap.isEmpty()) {
             return;
         }
 
+        var newsList = getAllNewsAndClear();
+        articleService.saveArticles(newsList);
+    }
+
+    private synchronized List<NewsItem> getAllNewsAndClear() {
         var newsList = bufferMap.values().stream()
                 .flatMap(List::stream)
                 .toList();
-        articleService.saveArticles(newsList);
         bufferMap.clear();
+
+        return newsList;
     }
 
-    private void putAll(Map<String, List<NewsItem>> map) {
+    private synchronized void putAll(Map<String, List<NewsItem>> map) {
         map.forEach((key, value) -> {
-            if (bufferMap.containsKey(key)) {
-                bufferMap.get(key).addAll(value);
-            } else {
-                bufferMap.put(key, value);
-            }
+            bufferMap.putIfAbsent(key, new ArrayList<>());
+            bufferMap.computeIfPresent(key, (k, list) -> {
+                list.addAll(value);
+                return list;
+            });
         });
     }
 }

@@ -4,7 +4,6 @@ import com.mfi_homework.mfi_homework.entity.NewsItem;
 import com.mfi_homework.mfi_homework.entity.NewsResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.web.context.support.SpringBeanAutowiringSupport;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.util.UriTemplate;
 
@@ -31,8 +30,6 @@ public class ReadNewsTask implements Runnable {
 
     @Override
     public void run() {
-        SpringBeanAutowiringSupport.processInjectionBasedOnCurrentContext(this);
-
         var uriTemplate = new UriTemplate(url + URI_PARAMS_TEMPLATE);
         while (skipCount.get() < max_count) {
             try {
