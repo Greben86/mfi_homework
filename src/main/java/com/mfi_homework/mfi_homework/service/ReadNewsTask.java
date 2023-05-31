@@ -8,6 +8,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.util.UriTemplate;
 
 import java.util.Comparator;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -16,12 +17,13 @@ import java.util.stream.Stream;
 @RequiredArgsConstructor
 public class ReadNewsTask implements Runnable {
     private static final String URI_PARAMS_TEMPLATE = "?_limit={articles_limit}&_start={skipped_articles}";
-    private static final long SLEEP_DURATION = 10_000L;
 
     private final String url;
     private final int limit;
     private final int max_count;
+    private final int duration_sleep;
     private final String[] black_list;
+    private final WebClient webClient;
     private final NewsBufferService buffer;
 
     private static final AtomicInteger skipCount = new AtomicInteger(0);
@@ -29,47 +31,45 @@ public class ReadNewsTask implements Runnable {
     @Override
     public void run() {
         var uriTemplate = new UriTemplate(url + URI_PARAMS_TEMPLATE);
-        boolean exitFlag = true;
-        while (exitFlag) {
+        while (skipCount.get() < max_count) {
             try {
                 int skip = skipCount.getAndUpdate(val -> Math.min(max_count, val+limit));
-                processGetNews(uriTemplate, skip);
-                if (skip == max_count) {
-                    exitFlag = false;
-                }
+                processGettingNews(uriTemplate, skip);
 
-                Thread.sleep(SLEEP_DURATION);
+                TimeUnit.SECONDS.sleep(duration_sleep);
             } catch (InterruptedException e) {
                 log.error(e.getMessage(), e);
-                exitFlag = false;
+                break;
+            } catch (Exception e) {
+                log.error(e.getMessage(), e);
             }
         }
+        buffer.saveAndClear();
+        log.info("All news already read");
     }
 
-    private void processGetNews(UriTemplate uriTemplate, int skip) {
-        try {
-            var response = WebClient.create()
-                    .get()
-                    .uri(uriTemplate.expand(limit, skip))
-                    .retrieve()
-                    .bodyToMono(NewsResponse.class)
-                    .blockOptional();
+    private void processGettingNews(UriTemplate uriTemplate, int skip) {
+        var response = webClient
+                .get()
+                .uri(uriTemplate.expand(limit, skip))
+                .retrieve()
+                .bodyToMono(NewsResponse.class)
+                .blockOptional();
 
-            if (response.isPresent()) {
-                var newsMap = response.get().stream()
-                        .filter(this::checkBlackList)
-                        .sorted(Comparator.comparing(NewsItem::getPublishedAt).reversed())
-                        .collect(Collectors.groupingBy(NewsItem::getNewsSite, Collectors.toList()));
+        if (response.isPresent()) {
+            var newsMap = response.get().stream()
+                    .filter(this::checkBlackList)
+                    .sorted(Comparator.comparing(NewsItem::getPublishedAt).reversed())
+                    .peek(item -> log.info(item.toString()))
+                    .collect(Collectors.groupingBy(NewsItem::getNewsSite, Collectors.toList()));
 
-                buffer.putAndSave(newsMap);
-            }
-        } catch (Exception e) {
-            log.error(e.getMessage(), e);
+            buffer.putAndSave(newsMap);
         }
     }
 
     private boolean checkBlackList(NewsItem item) {
         return Stream.of(black_list)
+                .filter(word -> !word.isBlank())
                 .noneMatch(item.getTitle()::contains);
     }
 }

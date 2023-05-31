@@ -10,40 +10,37 @@ import org.springframework.stereotype.Component;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.stream.Collectors;
 
 @RequiredArgsConstructor
 @Component
 public class NewsBufferServiceImpl implements NewsBufferService {
 
-    private final ReentrantLock locker = new ReentrantLock();
     private final Map<String, List<NewsItem>> bufferMap = new HashMap<>();
 
-    @Value("${buffer.max_size}")
+    @Value("${news.buffer.max_size}")
     private int maxSize;
 
     private final ArticleService articleService;
 
     @Override
-    public void putAndSave(Map<String, List<NewsItem>> map) {
-        locker.lock();
-        try {
-            putAll(map);
-            checkSizeAndSave();
-        } finally {
-            locker.unlock();
+    public synchronized void putAndSave(Map<String, List<NewsItem>> map) {
+        putAll(map);
+        if (bufferMap.size() >= maxSize) {
+            saveAndClear();
         }
     }
 
-    private void checkSizeAndSave() {
-        if (bufferMap.size() >= maxSize) {
-            var newsList = bufferMap.values().stream()
-                    .flatMap(List::stream)
-                    .collect(Collectors.toList());
-            articleService.saveArticles(newsList);
-            bufferMap.clear();
+    @Override
+    public synchronized void saveAndClear() {
+        if (bufferMap.isEmpty()) {
+            return;
         }
+
+        var newsList = bufferMap.values().stream()
+                .flatMap(List::stream)
+                .toList();
+        articleService.saveArticles(newsList);
+        bufferMap.clear();
     }
 
     private void putAll(Map<String, List<NewsItem>> map) {
