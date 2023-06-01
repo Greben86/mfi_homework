@@ -15,7 +15,7 @@ public class ArticleServiceHelperImpl implements ArticleServiceHelper {
 
     @Override
     public String loadArticleByUrl(String url) {
-        log.info(url);
+        log.info("Download article body from {}", url);
         var response = webClient
                 .get()
                 .uri(url)

@@ -36,6 +36,7 @@ public class ArticleServiceImpl implements ArticleService {
                         .build())
                 .toList();
         repository.saveAll(articles);
+        log.info("Save {} items", articles.size());
     }
 
     @Override

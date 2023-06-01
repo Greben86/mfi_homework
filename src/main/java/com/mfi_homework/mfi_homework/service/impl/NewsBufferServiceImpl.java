@@ -7,14 +7,16 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 @RequiredArgsConstructor
 @Component
 public class NewsBufferServiceImpl implements NewsBufferService {
 
-    private final Map<String, List<NewsItem>> bufferMap = new ConcurrentHashMap<>();
+    private final Map<String, List<NewsItem>> bufferMap = new HashMap<>();
 
     @Value("${news.buffer.max_count_for_site}")
     private int maxCountForSite;
@@ -25,7 +27,9 @@ public class NewsBufferServiceImpl implements NewsBufferService {
     public void putAllAndCheck(Map<String, List<NewsItem>> map) {
         putAll(map);
         var newsList = getFullSitesAndRemove();
-        articleService.saveArticles(newsList);
+        if (!newsList.isEmpty()) {
+            articleService.saveArticles(newsList);
+        }
     }
 
     private synchronized List<NewsItem> getFullSitesAndRemove() {
@@ -48,12 +52,10 @@ public class NewsBufferServiceImpl implements NewsBufferService {
 
     @Override
     public void saveAllAndClear() {
-        if (bufferMap.isEmpty()) {
-            return;
-        }
-
         var newsList = getAllNewsAndClear();
-        articleService.saveArticles(newsList);
+        if (!newsList.isEmpty()) {
+            articleService.saveArticles(newsList);
+        }
     }
 
     private synchronized List<NewsItem> getAllNewsAndClear() {
@@ -67,10 +69,9 @@ public class NewsBufferServiceImpl implements NewsBufferService {
 
     private synchronized void putAll(Map<String, List<NewsItem>> map) {
         map.forEach((key, value) -> {
-            bufferMap.putIfAbsent(key, new ArrayList<>());
-            bufferMap.computeIfPresent(key, (k, list) -> {
-                list.addAll(value);
-                return list;
+            bufferMap.merge(key, value, (left, right) -> {
+                left.addAll(right);
+                return left;
             });
         });
     }
