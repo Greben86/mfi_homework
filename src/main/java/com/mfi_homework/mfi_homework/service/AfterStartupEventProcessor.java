@@ -37,7 +37,8 @@ public class AfterStartupEventProcessor {
         var blackArray = blackList.split(",");
         for (int i = 0; i < threadCount; i++) {
             service.execute(
-                    new ReadNewsTask(url, limitThread, limitAll, threadDurationSleep, blackArray, webClient.mutate().build(), newsBufferService));
+                    new ReadNewsTask(url, limitThread, limitAll, threadDurationSleep, blackArray,
+                            webClient.mutate().build(), newsBufferService));
         }
 
         service.shutdown();

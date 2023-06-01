@@ -8,6 +8,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.util.UriTemplate;
 
 import java.util.Comparator;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -27,14 +28,17 @@ public class ReadNewsTask implements Runnable {
     private final NewsBufferService buffer;
 
     private static final AtomicInteger skipCount = new AtomicInteger(0);
+    private static final AtomicInteger readCount = new AtomicInteger(0);
 
     @Override
     public void run() {
         var uriTemplate = new UriTemplate(url + URI_PARAMS_TEMPLATE);
-        while (skipCount.get() < max_count) {
+        while (readCount.get() < max_count) {
             try {
-                int skip = skipCount.getAndUpdate(val -> Math.min(max_count, val+limit));
-                processGettingNews(uriTemplate, skip);
+                int skippedArticles = skipCount.getAndAdd(limit);
+                int articlesLimit = Math.min(limit, max_count - readCount.get());
+                int readArticles = processGettingNews(uriTemplate, articlesLimit, skippedArticles);
+                readCount.addAndGet(readArticles);
 
                 TimeUnit.SECONDS.sleep(duration_sleep);
             } catch (InterruptedException e) {
@@ -49,22 +53,29 @@ public class ReadNewsTask implements Runnable {
         log.info("All news already read");
     }
 
-    private void processGettingNews(UriTemplate uriTemplate, int skip) {
+    private int processGettingNews(UriTemplate uriTemplate, int articlesLimit, int skippedArticles) {
+        log.info("Request: ?_limit={}&_start={}", articlesLimit, skippedArticles);
         var response = webClient
                 .get()
-                .uri(uriTemplate.expand(limit, skip))
+                .uri(uriTemplate.expand(articlesLimit, skippedArticles))
                 .retrieve()
                 .bodyToMono(NewsResponse.class)
                 .blockOptional();
 
         if (response.isPresent()) {
             var newsMap = response.get().stream()
+                    .distinct()
                     .filter(this::checkBlackList)
                     .sorted(Comparator.comparing(NewsItem::getPublishedAt).reversed())
-                    .peek(item -> log.info(item.toString()))
                     .collect(Collectors.groupingBy(NewsItem::getNewsSite, Collectors.toList()));
 
             buffer.putAllAndCheck(newsMap);
+
+            return newsMap.values().stream()
+                    .mapToInt(List::size)
+                    .sum();
+        } else {
+            return 0;
         }
     }
 
