@@ -30,8 +30,8 @@ public class ArticleServiceImpl implements ArticleService {
                 .map(item -> Article.builder()
                         .id(item.getId())
                         .title(item.getTitle())
-                        .news_site(item.getNewsSite())
-                        .published_date(item.getPublishedAt())
+                        .newsSite(item.getNewsSite())
+                        .publishedDate(item.getPublishedAt())
                         .article(helper.loadArticleByUrl(item.getUrl()))
                         .build())
                 .toList();
@@ -52,7 +52,7 @@ public class ArticleServiceImpl implements ArticleService {
     @Override
     public List<Article> getArticlesByNewsSite(String newsSite) {
         try {
-            return repository.findByNews_site(newsSite);
+            return repository.findByNewsSite(newsSite);
         } catch (Exception e) {
             log.error(e.getMessage(), e);
             return Collections.emptyList();

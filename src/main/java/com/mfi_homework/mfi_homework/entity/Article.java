@@ -1,6 +1,7 @@
 package com.mfi_homework.mfi_homework.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Lob;
@@ -18,14 +19,16 @@ import java.util.Date;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@EqualsAndHashCode
+@EqualsAndHashCode(of = {"id"})
 @Table(name = "articles")
 public class Article {
     @Id
     private long id;
     private String title;
-    private String news_site;
-    private Date published_date;
+    @Column(name = "news_site")
+    private String newsSite;
+    @Column(name = "published_date")
+    private Date publishedDate;
     @Lob
     @JsonIgnore
     private String article;

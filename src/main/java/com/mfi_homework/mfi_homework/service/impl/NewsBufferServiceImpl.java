@@ -8,15 +8,15 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @RequiredArgsConstructor
 @Component
 public class NewsBufferServiceImpl implements NewsBufferService {
 
-    private final Map<String, List<NewsItem>> bufferMap = new HashMap<>();
+    private final Map<String, List<NewsItem>> bufferMap = new ConcurrentHashMap<>();
 
     @Value("${news.buffer.max_count_for_site}")
     private int maxCountForSite;
@@ -68,11 +68,13 @@ public class NewsBufferServiceImpl implements NewsBufferService {
     }
 
     private synchronized void putAll(Map<String, List<NewsItem>> map) {
-        map.forEach((key, value) -> {
-            bufferMap.merge(key, value, (left, right) -> {
-                left.addAll(right);
-                return left;
-            });
-        });
+        map.entrySet().stream()
+                .distinct()
+                .forEach(entry ->
+                    bufferMap.merge(entry.getKey(), entry.getValue(), (left, right) -> {
+                        left.addAll(right);
+                        return left;
+                    })
+                );
     }
 }

@@ -16,31 +16,23 @@ public class AfterStartupEventProcessor {
 
     @Value("${startup.thread.count}")
     private int threadCount;
-    @Value("${thread.duration.sleep.seconds}")
-    private int threadDurationSleep;
     @Value("${articles.limit_for_all}")
     private int limitAll;
     @Value("${articles.limit_for_thread}")
     private int limitThread;
     @Value("${articles.black_list}")
-    private String blackList;
-    @Value("${source.news.url}")
-    private String url;
+    private String[] blackList;
 
     public final WebClient webClient;
     public final NewsBufferService newsBufferService;
 
     @EventListener(ApplicationReadyEvent.class)
     public void process() {
-        ExecutorService service = Executors.newFixedThreadPool(threadCount);
-
-        var blackArray = blackList.split(",");
-        for (int i = 0; i < threadCount; i++) {
-            service.execute(
-                    new ReadNewsTask(url, limitThread, limitAll, threadDurationSleep, blackArray,
-                            webClient.mutate().build(), newsBufferService));
+        try (ExecutorService service = Executors.newFixedThreadPool(threadCount)) {
+            for (int i = 0; i < threadCount; i++) {
+                service.execute(new ReadNewsTask(limitThread, limitAll, blackList, webClient.mutate().build(),
+                        newsBufferService));
+            }
         }
-
-        service.shutdown();
     }
 }
